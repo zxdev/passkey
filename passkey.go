@@ -8,7 +8,9 @@ import (
 	"crypto/sha1"
 	"encoding/base32"
 	"encoding/binary"
+	"fmt"
 	"net/http"
+	"os"
 	"sync/atomic"
 	"time"
 )
@@ -65,8 +67,9 @@ func (pk *PassKey) Secret(secret interface{}) *PassKey {
 	return pk
 }
 
-// Start token generator using the secret and interval;
-// apply defaults when neither are configured
+// Start token generator using the secret and interval or apply
+// default values when neither are configured; when a secret is
+// generated the secret in use will be emited on os.Stdout
 func (pk *PassKey) Start(ctx context.Context) {
 
 	// default interval
@@ -74,9 +77,10 @@ func (pk *PassKey) Start(ctx context.Context) {
 		pk.Interval(nil)
 	}
 
-	// validate secret; or failover and generate new
+	// validate secret; or failover and generate new secret and emit
 	if bytes.Equal(pk.secret[:20], make([]byte, 20)) {
 		rand.Read(pk.secret[:])
+		fmt.Fprintln(os.Stdout, base32.StdEncoding.EncodeToString(pk.secret[:]))
 	}
 
 	// generate token set
@@ -136,7 +140,8 @@ func (pk *PassKey) generate(i int) {
 	wrapper for PassKey with addition server methods
 
 */
-// NewServer configurator takes a shared secret; applies defaults and starts generator
+// NewServer configurator takes a shared secret; applies defaults and will generate and
+// emit a new secret on os.Stdout when required, and starts the interval generator
 func NewServer(ctx context.Context, secret string) *Server {
 	var server = new(Server)
 	server.Secret(secret)
@@ -198,7 +203,8 @@ func (pk *Server) IsValid(next http.Handler) http.Handler {
 
 */
 
-// NewClient configurator takea a shared secret; applies defaults and starts generator
+// NewClient configurator takea a shared secret; applies defaults and will generate and
+// emit a new secret on os.Stdout when required, and starts the interval generator
 func NewClient(ctx context.Context, secret string) *Client {
 
 	client := new(Client)
