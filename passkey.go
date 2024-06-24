@@ -19,8 +19,8 @@ import (
 
 	PASSKEY
 	generates a rolling set of authention codes based on a specified
-	interval retaining the current, next, and previous that uses a
-	shared secret between the server and client
+	interval retaining the current, next, and previous code; uses a
+	shared secret between the server and clients
 
 */
 
@@ -30,9 +30,12 @@ type PassKey struct {
 	interval time.Duration    // defaults to one-minute
 	secret   [20]byte         // binary form of base32 secret; [A..Z,2..7]
 	cnp      [3]atomic.Uint64 // valid token set; past,current,furture
+	hKey     string           // http header passkey name; token
 }
 
 // Interval sets the PassKey generation interval; default time.Minute
+//
+//	pass nil for default
 func (pk *PassKey) Interval(interval *time.Duration) *PassKey {
 
 	if interval == nil || *interval == 0 {
@@ -41,6 +44,20 @@ func (pk *PassKey) Interval(interval *time.Duration) *PassKey {
 	}
 	pk.interval = *interval
 
+	return pk
+}
+
+// SetHeaderKey sets the http.Request header passkey name for use by the
+// server to authenticate the clients access credential; default token
+//
+//	pass nil for default
+func (pk *PassKey) SetHeaderKey(hkey *string) *PassKey {
+
+	if hkey == nil || len(*hkey) == 0 {
+		pk.hKey = "token"
+	} else {
+		pk.hKey = *hkey
+	}
 	return pk
 }
 
@@ -75,6 +92,11 @@ func (pk *PassKey) Start(ctx context.Context) {
 	// default interval
 	if pk.interval == 0 {
 		pk.Interval(nil)
+	}
+
+	// default header name
+	if len(pk.hKey) == 0 {
+		pk.SetHeaderKey(nil)
 	}
 
 	// validate secret; or failover and generate new secret and emit
@@ -152,23 +174,11 @@ func NewServer(ctx context.Context, secret string) *Server {
 // Server methods
 type Server struct {
 	PassKey
-	hKey string // header token key name
-}
-
-// SetHeaderKey sets the http.Request header key that the
-// IsValid middleware used to read r.Header.Get(pk.hKey)
-func (pk *Server) SetHeaderKey(hkey string) *Server {
-	pk.hKey = hkey
-	return pk
 }
 
 // IsValid returns a http.Handler middleware for authentication; the
 // default hKey {token} is set when necessary
 func (pk *Server) IsValid(next http.Handler) http.Handler {
-
-	if len(pk.hKey) == 0 {
-		pk.hKey = "token" // default
-	}
 
 	// IsValid middleware validates the current header key:{value} for access or
 	// aborts with a http.StatusUnauthorized response
@@ -208,7 +218,6 @@ func (pk *Server) IsValid(next http.Handler) http.Handler {
 func NewClient(ctx context.Context, secret string) *Client {
 
 	client := new(Client)
-	client.SetHeaderKey(nil)
 	client.Secret(secret)
 	client.Start(ctx)
 	return client
@@ -217,27 +226,17 @@ func NewClient(ctx context.Context, secret string) *Client {
 // Client methods
 type Client struct {
 	PassKey
-	hKey string
 }
 
-// SetHeaderKey sets the http.Request header key value that
-// calling Current(*http.Request) sets as token value; nil for default
-func (pk *Client) SetHeaderKey(hkey *string) *Client {
-	if hkey == nil || len(*hkey) == 0 {
-		pk.hKey = "token"
-	} else {
-		pk.hKey = *hkey
-	}
-	return pk
-}
-
-// SetHeader sets the req.Header key:{current} value
+// SetHeader sets the req.Header hKey:{current} value
 func (pk *Client) SetHeader(req *http.Request) {
 
 	var b [10]byte
 	rand.Read(b[8:]) // add random obfuscation bits
 	binary.LittleEndian.PutUint64(b[:], pk.cnp[0].Load())
 	req.Header.Set(pk.hKey, base32.StdEncoding.EncodeToString(b[:]))
+	// this code is required to mirror the code in
+	// in cmd.Current() to generate a valid passkey
 
 }
 
@@ -249,7 +248,7 @@ func (pk *Client) SetHeader(req *http.Request) {
 
 */
 
-// Client methods
+// CMD methods
 type CMD struct {
 	PassKey
 }
@@ -281,4 +280,7 @@ func (pk *CMD) Current(secret string) string {
 	rand.Read(b[8:]) // add random obfuscation bits
 	binary.LittleEndian.PutUint64(b[:], pk.cnp[0].Load())
 	return base32.StdEncoding.EncodeToString(b[:])
+	// this code is required to mirror the code in
+	// client.SetHeader() to generate a valid passkey
+
 }

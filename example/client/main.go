@@ -30,7 +30,6 @@ func main() {
 	var pk passkey.Client
 	pk.Secret("PASSKEYXXBASE32XXSECRETXXEXAMPLE")
 	pk.Interval(&interval)
-	pk.SetHeaderKey(nil)
 	pk.Start(context.Background())
 
 	var exit = 15
