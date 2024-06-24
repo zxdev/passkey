@@ -35,7 +35,7 @@ func (pk *PassKey) Interval(interval *time.Duration) *PassKey {
 
 	if interval == nil || *interval == 0 {
 		v := time.Minute
-		*interval = v
+		interval = &v
 	}
 	pk.interval = *interval
 
