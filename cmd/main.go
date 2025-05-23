@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +40,17 @@ func main() {
 
 	// configure secret
 	var secret = os.Getenv("SECRET")
+	if len(secret) == 0 && len(os.Args) == 1 {
+		if u, err := user.Current(); err == nil {
+			if f, err := os.Open(filepath.Join(u.HomeDir, ".pkgen")); err == nil {
+				var b [32]byte
+				f.Read(b[:])
+				f.Close()
+				secret = string(b[:])
+			}
+		}
+	}
+
 	if len(secret) == 0 && len(os.Args) > 1 {
 		if strings.TrimPrefix(os.Args[1], "-") == "help" {
 			fmt.Println("usage: pkgen                                    | emits {secret}")
